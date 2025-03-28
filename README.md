@@ -3,7 +3,7 @@
 - **Neo4j** for Knowledge Graph
 - **Gemini** for Generation
 - **Matplotlib** for Visualizations
-
+ 
 ## **Steps to Implement RAG with Knowledge Graph**
 
 ### 1. **Set up Neo4j for the Knowledge Graph**
