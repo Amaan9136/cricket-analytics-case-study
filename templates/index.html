@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Cricket Analytics</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script>
+    function toggleFields() {
+      const queryType = document.getElementById('query_type').value;
+      const singlePlayerSection = document.getElementById('single-player-section');
+      const compareSection = document.getElementById('compare-section');
+      const matchIdField = document.getElementById('id');
+
+      singlePlayerSection.style.display = 'none';
+      compareSection.style.display = 'none';
+      matchIdField.disabled = true;
+      matchIdField.value = '';
+
+      if (queryType === 'performance' || queryType === 'commentary') {
+        singlePlayerSection.style.display = 'block';
+      } else if (queryType === 'situation' || queryType === 'report') {
+        matchIdField.disabled = false;
+      } else if (queryType === 'compare') {
+        compareSection.style.display = 'block';
+      }
+    }
+
+    async function fetchPlayerNames() {
+      try {
+        const response = await fetch('/player_names');
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+
+        const playerList = document.getElementById('player_list');
+        playerList.innerHTML = '';
+        data.players.forEach(player => {
+          const option = document.createElement('option');
+          option.value = player;
+          playerList.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Error fetching player names:', error);
+      }
+    }
+
+    function validateForm() {
+      const queryType = document.getElementById('query_type').value;
+      const playerName = document.getElementById('player_name').value;
+      const matchId = document.getElementById('id').value;
+      const player1 = document.getElementById('player1').value;
+      const player2 = document.getElementById('player2').value;
+
+      if ((queryType === 'performance' || queryType === 'commentary') && !playerName) {
+        alert('Please enter a valid player name for this query type.');
+        return false;
+      }
+
+      if ((queryType === 'situation' || queryType === 'report') && !matchId) {
+        alert('Please enter a valid Match ID.');
+        return false;
+      }
+
+      if (queryType === 'compare' && (!player1 || !player2 || player1 === player2)) {
+        alert('Please enter two different valid player names for comparison.');
+        return false;
+      }
+      
+      return true;
+    }
+
+    window.onload = function() {
+      toggleFields();
+      fetchPlayerNames();
+    };
+  </script>
+</head>
+<body>
+  <div class="container">
+    <h1>Cricket Analytics System</h1>
+    <form action="/analyze" method="post" onsubmit="return validateForm()">
+      <label for="query_type">Select Query Type:</label>
+      <select name="query_type" id="query_type" onchange="toggleFields()">
+        <option value="performance">Player Performance Analysis</option>
+        <option value="situation">Match Situation Assessment</option>
+        <option value="commentary">Expert Commentary Simulation</option>
+        <option value="report">Structured Match Report</option>
+        <option value="compare">Comparative Analysis</option>
+      </select>
+
+      <div id="single-player-section" style="display:none;">
+        <label for="player_name">Player Name:</label>
+        <input type="text" name="player_name" id="player_name" list="player_list" placeholder="Enter player name">
+      </div>
+
+      <div>
+        <label for="id">Match ID:</label>
+        <input type="text" name="id" id="id" placeholder="Enter match ID" disabled>
+      </div>
+
+      <div id="compare-section" style="display:none;">
+        <label for="player1">Player 1:</label>
+        <input type="text" name="player1" id="player1" list="player_list" placeholder="Enter player 1">
+        <label for="player2">Player 2:</label>
+        <input type="text" name="player2" id="player2" list="player_list" placeholder="Enter player 2">
+      </div>
+
+      <datalist id="player_list"></datalist>
+
+      <button type="submit">Analyze</button>
+    </form>
+  </div>
+</body>
+</html>

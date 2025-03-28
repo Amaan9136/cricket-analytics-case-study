@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Analysis Result</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f9f9f9;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: center;
+    }
+    th {
+      background-color: #007bff;
+      color: white;
+    }
+    tr:nth-child(even) {
+      background-color: #f2f2f2;
+    }
+    a.back-btn {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+    }
+    a.back-btn:hover {
+      background-color: #0056b3;
+    }
+    img {
+      margin-top: 20px;
+      max-width: 100%;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Analysis Result</h1>
+
+    {% if player_data %}
+    <h2>Player Data</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Player</th>
+          <th>Match ID</th>
+          <th>Team 1</th>
+          <th>Team 2</th>
+          <th>Winner</th>
+          <th>Result Margin</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for data in player_data %}
+        <tr>
+          <td>{{ data.player_of_match }}</td>
+          <td>{{ data.id }}</td>
+          <td>{{ data.team1 }}</td>
+          <td>{{ data.team2 }}</td>
+          <td>{{ data.winner }}</td>
+          <td>{{ data.result_margin }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if result %}
+      <div id="result-container">{{ result | safe }}</div>
+    {% endif %}
+
+    {% if graph_url %}
+      <h2>Comparison Graph</h2>
+      <img src="{{ graph_url }}" alt="Player Comparison Graph" />
+    {% endif %}
+
+    <a href="/" class="back-btn">Go Back</a>
+  </div>
+</body>
+</html>
