@@ -1,7 +1,6 @@
 ## **Tech Stack**
 - **Python (Flask)** for API and Web App
 - **Neo4j** for Knowledge Graph
-- **FAISS or Chroma** for Vector Search (optional)
 - **Gemini** for Generation
 - **Matplotlib** for Visualizations
 
