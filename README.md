@@ -18,18 +18,6 @@ docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/passwor
 ---
 
 ### 2. **Create a Knowledge Graph Schema**
-representing cricket data like this:
-- **Player** → `Player {name, team, matches, runs, wickets}`
-- **Match** → `Match {match_id, date, venue, result}`
-- **Performance** → `Performance {runs, wickets, strike_rate}`
-
-**Cypher Queries**  
-```cypher
-CREATE (p:Player {name: "Virat Kohli", team: "RCB"})
-CREATE (m:Match {match_id: "123", date: "2024-03-01", venue: "Mumbai", result: "RCB Won"})
-CREATE (p)-[:PLAYED]->(m)
-CREATE (:Performance {runs: 74, wickets: 0, strike_rate: 145.3})-[:OF_PLAYER]->(p)-[:IN_MATCH]->(m)
-```
 ---
 
 ### 3. **Connect to Neo4j in Python**  
