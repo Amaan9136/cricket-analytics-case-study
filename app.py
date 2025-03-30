@@ -31,7 +31,7 @@ deliveries = pd.read_csv('deliveries.csv')
 def index():
     return render_template('index.html')
 
-# get All Player Names
+# get Player Names
 @app.route('/player_names')
 def player_names():
     try:
@@ -45,27 +45,45 @@ def player_names():
     except Exception as e:
         return jsonify({'error': str(e)})
 
-# analyze or Compare Players with display
 @app.route('/analyze', methods=['POST'])
 def analyze():
     query_type = request.form.get('query_type')
     player_name = request.form.get('player_name', '').strip()
-    id = request.form.get('id', '').strip()
+    match_id = request.form.get('id', '').strip()
     player1 = request.form.get('player1', '').strip()
     player2 = request.form.get('player2', '').strip()
 
-    # comparison
-    if query_type == 'compare':
-        if not player1 or not player2:
-            return render_template('result.html', result="Error: Both player names are required for comparison.")
-        graph_path = generate_graph(player1, player2)
-        return render_template('result.html', graph_url=graph_path) if graph_path else render_template('result.html', result="Error generating graph.")
-    
     player_data = []
     knowledge_base = ""
 
-    if player_name:
-        try:
+    if query_type == 'compare':
+        if not player1 or not player2 or player1 == player2:
+            return render_template('result.html', result="Error: Please provide two different player names for comparison.")
+        graph_path = generate_graph(player1, player2)
+        return render_template('result.html', graph_url=graph_path) if graph_path else render_template('result.html', result="Error generating graph.")
+
+    try:
+        if query_type in ['situation', 'report'] and match_id:
+            query = """
+            MATCH (m:Match)
+            WHERE m.id = $match_id
+            RETURN m.id AS id, m.season AS season, m.city AS city, m.date AS date, m.match_type AS match_type,
+                   m.player_of_match AS player_of_match, m.venue AS venue, m.team1 AS team1, m.team2 AS team2,
+                   m.toss_winner AS toss_winner, m.toss_decision AS toss_decision, m.winner AS winner, 
+                   m.result AS result, m.result_margin AS result_margin, m.target_runs AS target_runs,
+                   m.target_overs AS target_overs, m.super_over AS super_over, m.method AS method, 
+                   m.umpire1 AS umpire1, m.umpire2 AS umpire2
+            """
+            result = neo4j_conn.query(query, {"match_id": match_id})
+
+            if result:
+                player_data = [dict(record) for record in result]
+                for data in player_data:
+                    knowledge_base += f"{data}\n"
+            else:
+                return render_template('result.html', result="No data found for the given Match ID.")
+        
+        elif query_type in ['performance', 'commentary'] and player_name:
             query = """
             MATCH (m:Match)
             WHERE m.player_of_match = $player_name
@@ -79,37 +97,19 @@ def analyze():
             result = neo4j_conn.query(query, {"player_name": player_name})
             
             if result:
-                player_data = [{"id": record['id'], 
-                                "season": record['season'], 
-                                "city": record['city'],
-                                "date": record['date'],
-                                "match_type": record['match_type'],
-                                "player_of_match": record['player_of_match'],
-                                "venue": record['venue'],
-                                "team1": record['team1'],
-                                "team2": record['team2'],
-                                "toss_winner": record['toss_winner'],
-                                "toss_decision": record['toss_decision'],
-                                "winner": record['winner'],
-                                "result": record['result'],
-                                "result_margin": record['result_margin'],
-                                "target_runs": record['target_runs'],
-                                "target_overs": record['target_overs'],
-                                "super_over": record['super_over'],
-                                "method": record['method'],
-                                "umpire1": record['umpire1'],
-                                "umpire2": record['umpire2']} for record in result]
-                
-                # knowledge base from player data for RAG
-                knowledge_base = "\n".join([f"Match {data['id']} - {data['team1']} vs {data['team2']}: {data['result']} ({data['result_margin']})" for data in player_data])
-                print("Knowledge Base:", knowledge_base)
+                player_data = [dict(record) for record in result]
+                for data in player_data:
+                    knowledge_base += f"{data}\n"
             else:
-                return render_template('result.html', result=f"No data found for player: {player_name}")
-        except Exception as e:
-            return render_template('result.html', result=f"Error querying Neo4j: {e}")
+                return render_template('result.html', result="No data found for the given player name.")
+        
+        print("Knowledge Base Generated:\n", knowledge_base)
 
-    # AI Prompt with Knowledge Base for RAG
-    prompt = generate_prompt(query_type, player_name, id, knowledge_base)
+    except Exception as e:
+        return render_template('result.html', result=f"Error querying Neo4j: {e}")
+
+    prompt = generate_prompt(query_type, player_name, match_id, knowledge_base)
+    
     try:
         model = genai.GenerativeModel('gemini-1.5-pro')
         response = model.generate_content(prompt)
@@ -118,20 +118,54 @@ def analyze():
     except Exception as e:
         result_html = f"<p>Error during AI generation: {e}</p>"
 
-    return render_template('result.html', result=result_html, player_data=player_data)
+    return render_template('result.html', result=result_html, player_data=player_data, query_type=query_type, knowledge_base=knowledge_base)
 
-# Generate AI Prompt based on query type with Knowledge Base
-def generate_prompt(query_type, player_name='', id='', knowledge_base=''):
+def generate_prompt(query_type, player_name='', match_id='', knowledge_base=''):
     if query_type == 'performance':
-        return f"Analyze {player_name}'s IPL career, evaluating batting and bowling stats. Here is the match history: {knowledge_base}"
+        return (
+            f"You are a cricket analyst. Perform a detailed analysis of {player_name}'s IPL career using the following match data: {knowledge_base}\n"
+            f"Step 1: Identify {player_name}'s strengths and weaknesses in batting and bowling.\n"
+            f"Step 2: Analyze their performance against specific bowler types, conditions, and match scenarios.\n"
+            f"Step 3: Provide actionable insights on how {player_name} can improve their game."
+        )
+
     elif query_type == 'situation':
-        return f"Provide strategic recommendations for match {id}. Here is the match history: {knowledge_base}"
+        examples = (
+            "Example 1: In a match where the target is 180 in 20 overs, the team opted for aggressive batting in the powerplay.\n"
+            "Example 2: When defending a low score of 150, the captain strategically used spinners on a turning pitch.\n"
+            "Example 3: With 30 runs needed off 12 balls, bowlers focused on yorkers and slower balls to restrict scoring.\n"
+        )
+        return (
+            f"You are a cricket strategist. Based on the following examples, analyze the current match situation (Match ID: {match_id}):\n\n"
+            f"{examples}\nMatch Data: {knowledge_base}\n"
+            f"Provide clear tactical recommendations for the batting and bowling sides."
+        )
+
     elif query_type == 'commentary':
-        return f"Simulate expert commentary for {player_name}. Here is the match history: {knowledge_base}"
+        return (
+            f"Act as a cricket commentator and provide expert insights into {player_name}'s performance using the following match data: {knowledge_base}\n"
+            f"You can take on different roles:\n"
+            f"1. Batting Coach: Analyze {player_name}'s shot selection, footwork, and mindset.\n"
+            f"2. Bowling Coach: Examine how bowlers approached {player_name} and suggest improvements.\n"
+            f"3. Field Strategist: Discuss fielding placements and strategies applied to counter {player_name}.\n"
+            f"Provide detailed, engaging commentary with relevant cricket terminology."
+        )
+
     elif query_type == 'report':
-        return f"Generate a match report for Match ID: {id}. Here is the match history: {knowledge_base}"
+        return (
+            f"You are a cricket journalist. Generate a detailed match report for Match ID: {match_id} using the provided data.\n"
+            f"Ensure your report follows this structure:\n"
+            f"1. **Match Summary:** Provide a brief overview of the match result and key moments.\n"
+            f"2. **Top Performers:** Highlight standout performances from both teams.\n"
+            f"3. **Turning Points:** Discuss critical moments that influenced the outcome.\n"
+            f"4. **Key Statistics:** Include data such as top scorers, best bowlers, and partnership details.\n"
+            f"5. **Conclusion:** Provide a brief commentary on the match's impact on the tournament.\n"
+            f"Match Data: {knowledge_base}"
+        )
+
     else:
-        return f"Invalid query type. Please select a valid query."
+        return "Invalid query type. Please select a valid query."
+
 
 def generate_graph(player1, player2):
     try:

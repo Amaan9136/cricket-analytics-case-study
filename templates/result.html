@@ -53,6 +53,9 @@
       max-width: 100%;
       border-radius: 8px;
     }
+    .scrollable-table {
+      overflow-x: auto;
+    }
   </style>
 </head>
 <body>
@@ -64,23 +67,17 @@
     <table>
       <thead>
         <tr>
-          <th>Player</th>
-          <th>Match ID</th>
-          <th>Team 1</th>
-          <th>Team 2</th>
-          <th>Winner</th>
-          <th>Result Margin</th>
+          {% for key in player_data[0].keys() %}
+          <th>{{ key.replace('_', ' ').title() }}</th>
+          {% endfor %}
         </tr>
       </thead>
       <tbody>
         {% for data in player_data %}
         <tr>
-          <td>{{ data.player_of_match }}</td>
-          <td>{{ data.id }}</td>
-          <td>{{ data.team1 }}</td>
-          <td>{{ data.team2 }}</td>
-          <td>{{ data.winner }}</td>
-          <td>{{ data.result_margin }}</td>
+          {% for key in data %}
+          <td>{{ data[key] }}</td>
+          {% endfor %}
         </tr>
         {% endfor %}
       </tbody>
@@ -88,7 +85,90 @@
     {% endif %}
 
     {% if result %}
+      <h2>AI Generated Analysis</h2>
       <div id="result-container">{{ result | safe }}</div>
+    {% endif %}
+
+    {% if query_type == 'performance' and knowledge_base %}
+    <h2>Performance Analysis</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Match ID</th>
+          <th>Season</th>
+          <th>Venue</th>
+          <th>Winner</th>
+          <th>Result Margin</th>
+          <th>Player of Match</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for data in player_data %}
+        <tr>
+          <td>{{ data['id'] }}</td>
+          <td>{{ data['season'] }}</td>
+          <td>{{ data['venue'] }}</td>
+          <td>{{ data['winner'] }}</td>
+          <td>{{ data['result_margin'] }}</td>
+          <td>{{ data['player_of_match'] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if query_type == 'commentary' and knowledge_base %}
+    <h2>Commentary Insights</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Match ID</th>
+          <th>Player of Match</th>
+          <th>Team 1</th>
+          <th>Team 2</th>
+          <th>Winner</th>
+          <th>Toss Winner</th>
+          <th>Toss Decision</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for data in player_data %}
+        <tr>
+          <td>{{ data['id'] }}</td>
+          <td>{{ data['player_of_match'] }}</td>
+          <td>{{ data['team1'] }}</td>
+          <td>{{ data['team2'] }}</td>
+          <td>{{ data['winner'] }}</td>
+          <td>{{ data['toss_winner'] }}</td>
+          <td>{{ data['toss_decision'] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if player_data and query_type in ['performance', 'commentary'] %}
+    <h2>Knowledge Base (Match Details)</h2>
+    <div class="scrollable-table">
+      <table>
+        <thead>
+          <tr>
+            {% for key in player_data[0].keys() %}
+            <th>{{ key.replace('_', ' ').title() }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for data in player_data %}
+          <tr>
+            {% for key in data %}
+            <td>{{ data[key] }}</td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% endif %}
 
     {% if graph_url %}
