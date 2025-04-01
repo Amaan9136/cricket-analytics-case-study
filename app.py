@@ -11,7 +11,6 @@ from connect import neo4j_conn
 
 app = Flask(__name__)
 
-# environment variables
 load_dotenv()
 genai_api_key = os.getenv('GENAI_API_KEY')
 if not genai_api_key:
@@ -23,15 +22,12 @@ genai.configure(api_key=genai_api_key)
 if not os.path.exists('static/graphs'):
     os.makedirs('static/graphs')
 
-# used for graph generation
 deliveries = pd.read_csv('deliveries.csv')
-# matches.csv is imported in neo4j to do RAG
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# get Player Names
 @app.route('/player_names')
 def player_names():
     try:
@@ -52,6 +48,7 @@ def analyze():
     match_id = request.form.get('id', '').strip()
     player1 = request.form.get('player1', '').strip()
     player2 = request.form.get('player2', '').strip()
+    custom_prompt = request.form.get('custom_prompt', '').strip()
 
     player_data = []
     knowledge_base = ""
@@ -64,52 +61,31 @@ def analyze():
 
     try:
         if query_type in ['situation', 'report'] and match_id:
-            query = """
-            MATCH (m:Match)
-            WHERE m.id = $match_id
-            RETURN m.id AS id, m.season AS season, m.city AS city, m.date AS date, m.match_type AS match_type,
-                   m.player_of_match AS player_of_match, m.venue AS venue, m.team1 AS team1, m.team2 AS team2,
-                   m.toss_winner AS toss_winner, m.toss_decision AS toss_decision, m.winner AS winner, 
-                   m.result AS result, m.result_margin AS result_margin, m.target_runs AS target_runs,
-                   m.target_overs AS target_overs, m.super_over AS super_over, m.method AS method, 
-                   m.umpire1 AS umpire1, m.umpire2 AS umpire2
-            """
-            result = neo4j_conn.query(query, {"match_id": match_id})
-
-            if result:
-                player_data = [dict(record) for record in result]
-                for data in player_data:
-                    knowledge_base += f"{data}\n"
-            else:
-                return render_template('result.html', result="No data found for the given Match ID.")
+            knowledge_base = get_match_knowledge_base(match_id)
         
         elif query_type in ['performance', 'commentary'] and player_name:
-            query = """
-            MATCH (m:Match)
-            WHERE m.player_of_match = $player_name
-            RETURN m.id AS id, m.season AS season, m.city AS city, m.date AS date, m.match_type AS match_type,
-                   m.player_of_match AS player_of_match, m.venue AS venue, m.team1 AS team1, m.team2 AS team2,
-                   m.toss_winner AS toss_winner, m.toss_decision AS toss_decision, m.winner AS winner, 
-                   m.result AS result, m.result_margin AS result_margin, m.target_runs AS target_runs,
-                   m.target_overs AS target_overs, m.super_over AS super_over, m.method AS method, 
-                   m.umpire1 AS umpire1, m.umpire2 AS umpire2
-            """
-            result = neo4j_conn.query(query, {"player_name": player_name})
-            
-            if result:
-                player_data = [dict(record) for record in result]
-                for data in player_data:
-                    knowledge_base += f"{data}\n"
-            else:
-                return render_template('result.html', result="No data found for the given player name.")
+            knowledge_base = get_player_knowledge_base(player_name)
         
-        print("Knowledge Base Generated:\n", knowledge_base)
+        if custom_prompt:
+            knowledge_base = f"User's Custom Request: {custom_prompt}\n"
+            
+        if match_id:
+            knowledge_base += f"Match Data:\n{get_match_knowledge_base(match_id)}"
+
+        elif player_name:
+            knowledge_base += f"Player Data:\n{get_player_knowledge_base(player_name)}"
+
+        else:
+            knowledge_base += "Error: No match ID or player name provided."
+
+        print("Knowledge Base Retrieved:")
+        print(knowledge_base)
 
     except Exception as e:
         return render_template('result.html', result=f"Error querying Neo4j: {e}")
 
-    prompt = generate_prompt(query_type, player_name, match_id, knowledge_base)
-    
+    prompt = generate_prompt(query_type, player_name, match_id, knowledge_base, custom_prompt)
+
     try:
         model = genai.GenerativeModel('gemini-1.5-pro')
         response = model.generate_content(prompt)
@@ -120,7 +96,8 @@ def analyze():
 
     return render_template('result.html', result=result_html, player_data=player_data, query_type=query_type, knowledge_base=knowledge_base)
 
-def generate_prompt(query_type, player_name='', match_id='', knowledge_base=''):
+
+def generate_prompt(query_type, player_name='', match_id='', knowledge_base='', custom_prompt=''):
     if query_type == 'performance':
         return (
             f"You are a cricket analyst. Perform a detailed analysis of {player_name}'s IPL career using the following match data: {knowledge_base}\n"
@@ -162,10 +139,57 @@ def generate_prompt(query_type, player_name='', match_id='', knowledge_base=''):
             f"5. **Conclusion:** Provide a brief commentary on the match's impact on the tournament.\n"
             f"Match Data: {knowledge_base}"
         )
+    
+    elif custom_prompt:
+        return ( 
+            f"\n\nUser's Custom Request: {custom_prompt}"
+            f"Match Data: {knowledge_base}"
+            f"Player Name: {player_name}"
+        )
 
     else:
         return "Invalid query type. Please select a valid query."
+    
 
+def get_player_knowledge_base(player_name):
+    try:
+        query = """
+        MATCH (m:Match)
+        WHERE m.player_of_match = $player_name
+        RETURN m.id AS id, m.season AS season, m.city AS city, m.date AS date, m.match_type AS match_type,
+               m.player_of_match AS player_of_match, m.venue AS venue, m.team1 AS team1, m.team2 AS team2,
+               m.toss_winner AS toss_winner, m.toss_decision AS toss_decision, m.winner AS winner, 
+               m.result AS result, m.result_margin AS result_margin, m.target_runs AS target_runs,
+               m.target_overs AS target_overs, m.super_over AS super_over, m.method AS method, 
+               m.umpire1 AS umpire1, m.umpire2 AS umpire2
+        """
+        result = neo4j_conn.query(query, {"player_name": player_name})
+        player_data = [dict(record) for record in result] if result else []
+        knowledge_base = "\n".join([str(data) for data in player_data])
+        return knowledge_base
+    except Exception as e:
+        print(f"Error querying Neo4j for player {player_name}: {e}")
+        return ""
+
+def get_match_knowledge_base(match_id):
+    try:
+        query = """
+        MATCH (m:Match)
+        WHERE m.id = $match_id
+        RETURN m.id AS id, m.season AS season, m.city AS city, m.date AS date, m.match_type AS match_type,
+               m.player_of_match AS player_of_match, m.venue AS venue, m.team1 AS team1, m.team2 AS team2,
+               m.toss_winner AS toss_winner, m.toss_decision AS toss_decision, m.winner AS winner, 
+               m.result AS result, m.result_margin AS result_margin, m.target_runs AS target_runs,
+               m.target_overs AS target_overs, m.super_over AS super_over, m.method AS method, 
+               m.umpire1 AS umpire1, m.umpire2 AS umpire2
+        """
+        result = neo4j_conn.query(query, {"match_id": match_id})
+        match_data = [dict(record) for record in result] if result else []
+        knowledge_base = "\n".join([str(data) for data in match_data])
+        return knowledge_base
+    except Exception as e:
+        print(f"Error querying Neo4j for match {match_id}: {e}")
+        return ""
 
 def generate_graph(player1, player2):
     try:
@@ -176,16 +200,13 @@ def generate_graph(player1, player2):
         player1_data = deliveries[deliveries['batter'] == player1]
         player2_data = deliveries[deliveries['batter'] == player2]
 
-        # if any data is found for either player
         if player1_data.empty or player2_data.empty:
             print(f"No data available for {player1} or {player2}.")
             return None
 
-        # total runs for each player grouped by match_id
         player1_runs = player1_data.groupby('match_id')['batsman_runs'].sum().reset_index()
         player2_runs = player2_data.groupby('match_id')['batsman_runs'].sum().reset_index()
 
-        # the total runs by match_id for both players
         plt.figure(figsize=(10, 6))
         plt.plot(player1_runs['match_id'].to_numpy(), player1_runs['batsman_runs'].to_numpy(), label=player1, marker='o', color='blue')
         plt.plot(player2_runs['match_id'].to_numpy(), player2_runs['batsman_runs'].to_numpy(), label=player2, marker='s', color='red')
@@ -195,7 +216,6 @@ def generate_graph(player1, player2):
         plt.legend()
         plt.grid(True)
 
-        # the graph to a file
         graph_path = f"static/graphs/{player1}_vs_{player2}.png"
         plt.savefig(graph_path)
         plt.close()
